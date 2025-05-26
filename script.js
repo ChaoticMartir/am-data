@@ -10,220 +10,149 @@ document.addEventListener('DOMContentLoaded', async () => {
     let allLocations = {}; // For storing location data (ID: Name)
 
     const API_BASE_URL = "https://west.albion-online-data.com/api/v2/stats/prices/";
-    const DEFAULT_LANGUAGE = 'ES-ES'; // Change this if you prefer another language (e.g., 'EN-US')
+    const DEFAULT_LANGUAGE = 'ES-ES';
 
-    // --- CITIES EXPLICITLY ALLOWED BY USER (CORRECTED UNIQUE NAMES) ---
-    // Keeping this defined, but temporarily NOT used in filtering for debugging
-    const ALLOWED_CITIES_FOR_DROPDOWN = [
-        "BRECILIEN",
-        "FORTSTERLING",
-        "LYMHURST",
-        "BRIDGEWATCH",
-        "MARTLOCK",
-        "THETFORD",
-        "CAERLEON"
-    ];
-    // const allowedCitiesSet = new Set(ALLOWED_CITIES_FOR_DROPDOWN); // Temporarily not used
+    // Correctly defined city names as they appear in the API and world.json
+    const mainCities = new Set([
+        "Black Market", "Bridgewatch", "Caerleon", "Fort Sterling",
+        "Lymhurst", "Martlock", "Thetford", "Brecilien"
+    ]);
 
-
-    // --- Función para cargar JSON local ---
+    // --- Function to load local JSON ---
     async function loadJson(filename) {
         try {
             const response = await fetch(filename);
             if (!response.ok) {
-                const errorText = `Error HTTP (${response.status}) al cargar ${filename}: ${response.statusText}`;
-                console.error(errorText);
-                dataContainer.innerHTML += `<p style="color: red;">${errorText}</p>`; // Append error
-                return null;
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-            const data = await response.json();
-            console.log(`Successfully loaded ${filename}. Data size: ${JSON.stringify(data).length} bytes.`); // Log success and size
-            if (!Array.isArray(data) || data.length === 0) {
-                 const warningText = `Advertencia: El archivo ${filename} se cargó pero está vacío o no es un array válido.`;
-                 console.warn(warningText);
-                 dataContainer.innerHTML += `<p style="color: orange;">${warningText}</p>`; // Append warning
-            }
-            return data;
-        } catch (error) {
-            const errorText = `Error fatal al cargar el archivo ${filename}: ${error.message}.`;
-            console.error(errorText, error);
-            dataContainer.innerHTML += `<p style="color: red;">${errorText} Asegúrate de que los archivos estén en la misma carpeta y accesibles.</p>`; // Append fatal error
+            return await response.json();
+        } catch (e) {
+            console.error(`Error loading ${filename}:`, e);
+            dataContainer.innerHTML = `<p style="color: red;">Error loading necessary file: ${filename}. Check the console for more details.</p>`;
             return null;
         }
     }
 
-    // --- Función para poblar los selectores ---
-    function populateSelect(selectElement, data) {
-        selectElement.innerHTML = ''; // Limpiar opciones existentes
-        
-        const sortedData = Object.entries(data).sort(([, a], [, b]) => a.localeCompare(b));
+    // --- Populate Items Dropdown ---
+    async function populateItems() {
+        const itemsData = await loadJson('items.json');
+        if (!itemsData) return;
 
-        if (sortedData.length === 0) {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = `No hay ${selectElement.id === 'item-select' ? 'ítems' : 'ciudades'} disponibles.`;
-            selectElement.appendChild(option);
-            selectElement.disabled = true; // Disable if empty
-        } else {
-            selectElement.disabled = false; // Enable if not empty
-            for (const [id, name] of sortedData) {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = name;
-                selectElement.appendChild(option);
-            }
-        }
-        console.log(`Populated ${selectElement.id} with ${sortedData.length} entries.`);
-    }
-
-    // Function to filter and populate item dropdown
-    function filterAndPopulateItems(searchTerm = '') {
-        const lowerCaseSearchTerm = searchTerm.toLowerCase();
         const filteredItems = {};
-        let count = 0;
-        for (const id in rawAllItems) {
-            if (typeof rawAllItems[id] === 'string' && rawAllItems[id].toLowerCase().includes(lowerCaseSearchTerm)) {
-                filteredItems[id] = rawAllItems[id];
-                count++;
+        itemsData.forEach(item => {
+            const itemName = item.LocalizedNames ? item.LocalizedNames[DEFAULT_LANGUAGE] : item.UniqueName;
+            const itemID = item.UniqueName;
+            if (itemName && itemID) {
+                // We only add items that are not sub-quality variations for the selector
+                if (!itemID.includes('@')) {
+                   filteredItems[itemID] = itemName;
+                }
+                // But we store all items for later display
+                rawAllItems[itemID] = itemName;
             }
-        }
-        populateSelect(itemSelect, filteredItems);
-        console.log(`Filtered items: <span class="math-inline">\{count\} found for search term "</span>{searchTerm}"`);
+        });
+
+        // Sort items by name
+        allItems = Object.fromEntries(
+            Object.entries(filteredItems).sort(([, a], [, b]) => a.localeCompare(b))
+        );
+
+        renderItems(Object.keys(allItems));
     }
 
-    // --- Cargar y poblar selectores al inicio ---
-    async function initializeSelectors() {
-        dataContainer.innerHTML = '<p>Cargando listas de ítems y ciudades...</p>'; // Initial loading message
-        
-        const rawItemData = await loadJson('items.json');
-        const rawLocationData = await loadJson('world.json');
-
-        // --- Process Items ---
-        if (rawItemData && Array.isArray(rawItemData) && rawItemData.length > 0) {
-            rawAllItems = rawItemData.reduce((acc, item) => {
-                let uniqueId = null;
-                if (typeof item.LocalizationNameVariable === 'string' && item.LocalizationNameVariable.startsWith('@ITEMS_')) {
-                    uniqueId = item.LocalizationNameVariable.replace('@ITEMS_', '');
-                } else if (typeof item.UniqueName === 'string' && item.UniqueName.trim() !== '') {
-                    uniqueId = item.UniqueName;
-                }
-
-                let displayDisplayName = null;
-                if (item.LocalizedNames && typeof item.LocalizedNames === 'object') {
-                    displayDisplayName = item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'];
-                }
-                
-                if (typeof displayDisplayName !== 'string' || displayDisplayName.trim() === '') {
-                    displayDisplayName = uniqueId || `Item ID: ${uniqueId || 'N/A'}`;
-                    if (typeof displayDisplayName !== 'string' || displayDisplayName.trim() === '') {
-                        displayDisplayName = 'Missing Name';
-                    }
-                }
-
-                if (uniqueId && typeof uniqueId === 'string' && uniqueId.trim() !== '') {
-                    acc[uniqueId] = displayDisplayName;
-                }
-                return acc;
-            }, {});
-            
-            console.log(`Raw All Items loaded: ${Object.keys(rawAllItems).length} entries.`);
-            filterAndPopulateItems();
-        } else {
-            console.error("No se pudieron procesar los datos de ítems (archivo vacío o inválido después de cargar).");
-            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ítems está vacía o es inválida después de procesar.</p>';
-            populateSelect(itemSelect, {});
-        }
-
-        // --- Process Cities ---
-        if (rawLocationData && Array.isArray(rawLocationData) && rawLocationData.length > 0) {
-            allLocations = rawLocationData.reduce((acc, loc) => {
-                if (loc.UniqueName && typeof loc.UniqueName === 'string' && loc.UniqueName.trim() !== '') {
-                    // Temporarily keeping the filter broad for debugging.
-                    // If you see many unexpected entries, we'll need to refine this.
-                    if (!loc.UniqueName.startsWith('ISLAND-') && loc.UniqueName !== 'Debug') {
-                        acc[loc.UniqueName] = loc.UniqueName;
-                    }
-                }
-                return acc;
-            }, {});
-            console.log(`All Locations loaded (unfiltered for debug): ${Object.keys(allLocations).length} entries.`);
-            populateSelect(citySelect, allLocations);
-        } else {
-            console.error("No se pudieron procesar los datos de ubicaciones (archivo vacío o inválido después de cargar).");
-            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ciudades está vacía o es inválida después de procesar.</p>';
-            populateSelect(citySelect, {});
-        }
-        
-        // Final message only if no critical errors happened
-        if (!dataContainer.innerHTML.includes('Error:') && !dataContainer.innerHTML.includes('Advertencia:')) {
-            dataContainer.innerHTML += '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
-        }
+    // --- Render Items in the Select Box ---
+    function renderItems(itemKeys) {
+        itemSelect.innerHTML = '';
+        itemKeys.forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = allItems[key];
+            itemSelect.appendChild(option);
+        });
     }
 
-    // --- Función para obtener los valores seleccionados de un selector múltiple ---
-    function getSelectedOptions(selectElement) {
-        return Array.from(selectElement.selectedOptions).map(option => option.value);
+    // --- Populate Cities Dropdown ---
+    async function populateCities() {
+        const worldData = await loadJson('world.json');
+        if (!worldData) return;
+
+        const uniqueLocations = new Map();
+        worldData.forEach(location => {
+            // Use the UniqueName as the value for the dropdown, which is what the API expects
+            if (mainCities.has(location.UniqueName)) {
+               uniqueLocations.set(location.UniqueName, location.UniqueName);
+            }
+        });
+
+        // Clear previous options
+        citySelect.innerHTML = '';
+
+        // Sort and populate the dropdown
+        const sortedCities = Array.from(uniqueLocations.keys()).sort();
+        sortedCities.forEach(city => {
+            const option = document.createElement('option');
+            option.value = city;
+            option.textContent = city;
+            citySelect.appendChild(option);
+            allLocations[city] = city; // Store for later reference
+        });
     }
 
-    // --- Función para obtener datos del API de Albion Online ---
-    async function getAlbionMarketData() {
-        const selectedItems = getSelectedOptions(itemSelect);
-        const selectedCities = getSelectedOptions(citySelect);
-        const qualities = [1, 2, 3, 4, 5]; // Puedes hacer esto seleccionable también si quieres
+    // --- Fetch Data from Albion API ---
+    async function fetchData() {
+        const selectedItems = Array.from(itemSelect.selectedOptions).map(opt => opt.value);
+        const selectedCities = Array.from(citySelect.selectedOptions).map(opt => opt.value);
 
         if (selectedItems.length === 0 || selectedCities.length === 0) {
             dataContainer.innerHTML = '<p style="color: orange;">Por favor, selecciona al menos un ítem y una ciudad.</p>';
             return;
         }
 
-        dataContainer.innerHTML = '<p>Obteniendo datos... Esto puede tomar un momento.</p>';
+        const itemsQuery = selectedItems.join(',');
+        const citiesQuery = selectedCities.join(',');
 
-        const itemIdsStr = selectedItems.join(',');
-        const locationsStr = selectedCities.join(',');
-        const qualitiesStr = qualities.join(',');
+        const url = `${API_BASE_URL}${itemsQuery}?locations=${citiesQuery}`;
 
-        const url = `<span class="math-inline">\{API\_BASE\_URL\}</span>{itemIdsStr}.json?locations=<span class="math-inline">\{locationsStr\}&qualities\=</span>{qualitiesStr}`;
-
-        console.log(`Haciendo petición a: ${url}`);
+        dataContainer.innerHTML = '<p>Cargando datos...</p>';
 
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+                throw new Error(`Error en la solicitud a la API: ${response.status} ${response.statusText}`);
             }
             const data = await response.json();
-
-            if (data && data.length > 0) {
-                renderTable(data);
-            } else {
-                dataContainer.innerHTML = '<p>No se encontraron datos para la combinación de ítems/ubicaciones/calidades seleccionada.</p>';
-            }
+            displayData(data);
         } catch (error) {
-            console.error('Hubo un problema al obtener los datos:', error);
-            dataContainer.innerHTML = `<p style="color: red;">Error al cargar los datos de la API: ${error.message}. Por favor, inténtalo de nuevo.</p>`;
+            console.error('Error fetching data:', error);
+            dataContainer.innerHTML = `<p style="color: red;">Error al obtener datos: ${error.message}</p>`;
         }
     }
 
-    // --- Función para renderizar la tabla de datos ---
-    function renderTable(data) {
+    // --- Display Data in a Table ---
+    function displayData(data) {
+        if (data.length === 0) {
+            dataContainer.innerHTML = '<p>No se encontraron datos para la selección actual.</p>';
+            return;
+        }
+
+        const columns = [
+            'item_id', 'city', 'quality',
+            'sell_price_min', 'sell_price_min_date',
+            'sell_price_max', 'sell_price_max_date',
+            'buy_price_min', 'buy_price_min_date',
+            'buy_price_max', 'buy_price_max_date'
+        ];
+
         let tableHTML = '<table><thead><tr>';
-
-        const allKeys = new Set();
-        data.forEach(item => {
-            Object.keys(item).forEach(key => allKeys.add(key));
-        });
-        const preferredOrder = ['item_id', 'city', 'quality', 'sell_price_min', 'sell_price_min_date', 'buy_price_max', 'buy_price_max_date', 'sell_price_max', 'buy_price_min', 'timestamp'];
-        const columns = preferredOrder.filter(key => allKeys.has(key)).concat(Array.from(allKeys).filter(key => !preferredOrder.includes(key)).sort());
-
-
         columns.forEach(key => {
-            let headerText = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            if (key === 'item_id') headerText = 'Item';
-            if (key === 'sell_price_min') headerText = 'Venta Mín.';
-            if (key === 'buy_price_max') headerText = 'Compra Máx.';
+            let headerText = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            if (key === 'item_id') headerText = 'Ítem';
+            if (key === 'city') headerText = 'Ciudad';
+            if (key === 'quality') headerText = 'Calidad';
+            if (key === 'sell_price_min') headerText = 'Precio Venta Mín.';
             if (key === 'sell_price_min_date') headerText = 'Fecha Venta Mín.';
             if (key === 'buy_price_max_date') headerText = 'Fecha Compra Máx.';
-            
+
             tableHTML += `<th>${headerText}</th>`;
         });
         tableHTML += '</tr></thead><tbody>';
@@ -232,23 +161,43 @@ document.addEventListener('DOMContentLoaded', async () => {
             tableHTML += '<tr>';
             columns.forEach(key => {
                 let value = item[key];
-                
+
                 if (key === 'item_id' && rawAllItems[value]) {
                     value = rawAllItems[value];
-                } else if (key === 'city' && allLocations[value]) {
-                    value = allLocations[value];
-                } else if (typeof value === 'number' && (key.includes('price') || key.includes('amount'))) {
+                } else if (key === 'city') {
+                    value = value;
+                } else if (typeof value === 'number' && (key.includes('price'))) {
                     value = value.toLocaleString();
-                } else if ((key.includes('date') || key.includes('timestamp')) && value) {
+                } else if (key.includes('date')) {
                     try {
-                        const date = new Date(value);
-                        if (!isNaN(date.getTime())) {
-                            value = date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
-                        }
-                    } catch (e) {
-                        // If not a valid date, use original value
-                    }
+                        value = new Date(value).toLocaleString('es-ES');
+                    } catch (e) { /* keep original value */ }
                 } else if (key === 'quality') {
-                    const qualityNames = { 1: 'Normal', 2: 'Bueno', 3: 'Excepcional', 4: 'Excelente', 5: 'Sobresaliente' };
+                    const qualityNames = { 1: 'Normal', 2: 'Buena', 3: 'Excepcional', 4: 'Excelente', 5: 'Obra Maestra' };
                     value = qualityNames[value] || value;
                 }
+
+                tableHTML += `<td>${value}</td>`;
+            });
+            tableHTML += '</tr>';
+        });
+
+        tableHTML += '</tbody></table>';
+        dataContainer.innerHTML = tableHTML;
+    }
+
+    // --- Event Listeners ---
+    fetchDataButton.addEventListener('click', fetchData);
+
+    itemSearchInput.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredKeys = Object.keys(allItems).filter(key =>
+            allItems[key].toLowerCase().includes(searchTerm)
+        );
+        renderItems(filteredKeys);
+    });
+
+    // --- Initial Load ---
+    await populateItems();
+    await populateCities();
+});
