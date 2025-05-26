@@ -4,10 +4,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fetchDataButton = document.getElementById('fetch-data-button');
     const dataContainer = document.getElementById('data-container');
 
-    let allItems = {}; // Para almacenar los items del JSON
-    let allLocations = {}; // Para almacenar las ubicaciones del JSON
+    let allItems = {}; // Para almacenar los items del JSON (ID: Nombre)
+    let allLocations = {}; // Para almacenar las ubicaciones del JSON (ID: Nombre)
 
     const API_BASE_URL = "https://west.albion-online-data.com/api/v2/stats/prices/";
+    const DEFAULT_LANGUAGE = 'ES-ES'; // Cambia esto si prefieres otro idioma (ej. 'EN-US')
 
     // --- Función para cargar JSON local ---
     async function loadJson(filename) {
@@ -28,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function populateSelect(selectElement, data) {
         selectElement.innerHTML = ''; // Limpiar opciones existentes
         
-        // Ordenar los datos alfabéticamente por el texto a mostrar
+        // Convertir el objeto de datos en un array de pares [id, nombre] y ordenarlo
         const sortedData = Object.entries(data).sort(([, a], [, b]) => a.localeCompare(b));
 
         for (const [id, name] of sortedData) {
@@ -43,24 +44,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function initializeSelectors() {
         dataContainer.innerHTML = '<p>Cargando listas de ítems y ciudades...</p>';
         
-        // Cargar items.json
-        const itemData = await loadJson('items.json'); // Changed filename
-        // Cargar world.json
-        const locationData = await loadJson('world.json'); // Changed filename
+        // Cargar items.json (que es un ARRAY de objetos)
+        const rawItemData = await loadJson('items.json');
+        // Cargar world.json (asumimos que es un ARRAY de objetos)
+        const rawLocationData = await loadJson('world.json');
 
-        if (itemData) {
-            // Asumiendo que items.json es un objeto { "ITEM_ID": "Item Name", ... }
-            allItems = itemData;
+        if (rawItemData) {
+            // Mapear el array de objetos a un objeto { UniqueName: LocalizedName }
+            allItems = rawItemData.reduce((acc, item) => {
+                // Extraer el UniqueName eliminando "@ITEMS_"
+                // El UniqueName es el ID que usa el API para las peticiones
+                const uniqueName = item.LocalizationNameVariable ? item.LocalizationNameVariable.replace('@ITEMS_', '') : null;
+                
+                // Obtener el nombre localizado, preferiblemente en ES-ES, si no, EN-US, si no, el ID
+                const localizedName = item.LocalizedNames ? (item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'] || uniqueName) : uniqueName;
+                
+                if (uniqueName && localizedName) {
+                    acc[uniqueName] = localizedName;
+                }
+                return acc;
+            }, {});
             populateSelect(itemSelect, allItems);
         } else {
             console.error("No se pudieron cargar los datos de ítems.");
         }
 
-        if (locationData) {
-            // Asumiendo que world.json es un array de objetos como:
-            // [{ "UniqueName": "ForestCross", "LocalizedName": "Forest Cross" }, ...]
-            allLocations = locationData.reduce((acc, loc) => {
-                acc[loc.UniqueName] = loc.LocalizedName;
+        if (rawLocationData) {
+            // Mapear el array de objetos a un objeto { UniqueName: LocalizedName }
+            allLocations = rawLocationData.reduce((acc, loc) => {
+                // Usamos el nombre localizado de la ciudad, si no, el UniqueName
+                const localizedName = loc.LocalizedName || loc.UniqueName; 
+                if (loc.UniqueName && localizedName) {
+                    acc[loc.UniqueName] = localizedName;
+                }
                 return acc;
             }, {});
             populateSelect(citySelect, allLocations);
