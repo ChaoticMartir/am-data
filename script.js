@@ -1,73 +1,186 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const itemSelect = document.getElementById('item-select');
+    const citySelect = document.getElementById('city-select');
+    const fetchDataButton = document.getElementById('fetch-data-button');
     const dataContainer = document.getElementById('data-container');
 
-    // Define los ítems, ubicaciones y calidades que te interesan
-    const itemIds = ["T4_BAG", "T5_BAG", "T6_BAG"];
-    const locations = ["Martlock", "Fort Sterling", "Thetford", "Lymhurst", "Bridgewatch", "Caerleon"];
-    const qualities = [1, 2, 3]; // 1: Normal, 2: Bueno, 3: Excepcional
+    let allItems = {}; // Para almacenar los items del JSON
+    let allLocations = {}; // Para almacenar las ubicaciones del JSON
 
-    const baseUrl = "https://west.albion-online-data.com/api/v2/stats/prices/";
-    const url = `${baseUrl}${itemIds.join(',')}.json?locations=${locations.join(',')}&qualities=${qualities.join(',')}`;
+    const API_BASE_URL = "https://west.albion-online-data.com/api/v2/stats/prices/";
 
-    fetch(url)
-        .then(response => {
+    // --- Función para cargar JSON local ---
+    async function loadJson(filename) {
+        try {
+            const response = await fetch(filename);
             if (!response.ok) {
-                // Si la respuesta no es OK (ej. 404, 500), lanza un error
-                throw new Error(`Error HTTP: ${response.status}`);
+                throw new Error(`Error al cargar ${filename}: ${response.statusText}`);
             }
-            return response.json(); // Parsea la respuesta como JSON
-        })
-        .then(data => {
+            return await response.json();
+        } catch (error) {
+            console.error(`No se pudo cargar el archivo ${filename}:`, error);
+            dataContainer.innerHTML = `<p style="color: red;">Error: No se pudo cargar la lista de ${filename.includes('item') ? 'ítems' : 'ciudades'}. Asegúrate de que los archivos estén en la misma carpeta.</p>`;
+            return null;
+        }
+    }
+
+    // --- Función para poblar los selectores ---
+    function populateSelect(selectElement, data, valueKey, textKey) {
+        selectElement.innerHTML = ''; // Limpiar opciones existentes
+        // Opción predeterminada (opcional, si no usas 'multiple' con tamaño)
+        // const defaultOption = document.createElement('option');
+        // defaultOption.value = '';
+        // defaultOption.textContent = `Selecciona ${valueKey === 'UniqueName' ? 'un ítem' : 'una ciudad'}`;
+        // selectElement.appendChild(defaultOption);
+
+        // Ordenar los datos alfabéticamente por el texto a mostrar
+        const sortedData = Object.entries(data).sort(([, a], [, b]) => a.localeCompare(b));
+
+        for (const [id, name] of sortedData) {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = name;
+            selectElement.appendChild(option);
+        }
+    }
+
+    // --- Cargar y poblar selectores al inicio ---
+    async function initializeSelectors() {
+        dataContainer.innerHTML = '<p>Cargando listas de ítems y ciudades...</p>';
+        
+        const itemData = await loadJson('items.json');
+        const locationData = await loadJson('world.json');
+
+        if (itemData) {
+            allItems = itemData;
+            populateSelect(itemSelect, allItems, 'UniqueName', 'LocalizedNames');
+        } else {
+            console.error("No se pudieron cargar los datos de ítems.");
+        }
+
+        if (locationData) {
+            // El JSON de ubicaciones es un array de objetos, necesitamos mapearlo a un objeto {id: name}
+            allLocations = locationData.reduce((acc, loc) => {
+                acc[loc.UniqueName] = loc.LocalizedName;
+                return acc;
+            }, {});
+            populateSelect(citySelect, allLocations, 'UniqueName', 'LocalizedName');
+        } else {
+            console.error("No se pudieron cargar los datos de ubicaciones.");
+        }
+        
+        dataContainer.innerHTML = '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
+    }
+
+    // --- Función para obtener los valores seleccionados de un selector múltiple ---
+    function getSelectedOptions(selectElement) {
+        return Array.from(selectElement.selectedOptions).map(option => option.value);
+    }
+
+    // --- Función para obtener datos del API de Albion Online ---
+    async function getAlbionMarketData() {
+        const selectedItems = getSelectedOptions(itemSelect);
+        const selectedCities = getSelectedOptions(citySelect);
+        const qualities = [1, 2, 3, 4, 5]; // Puedes hacer esto seleccionable también si quieres
+
+        if (selectedItems.length === 0 || selectedCities.length === 0) {
+            dataContainer.innerHTML = '<p style="color: orange;">Por favor, selecciona al menos un ítem y una ciudad.</p>';
+            return;
+        }
+
+        dataContainer.innerHTML = '<p>Obteniendo datos... Esto puede tomar un momento.</p>';
+
+        const itemIdsStr = selectedItems.join(',');
+        const locationsStr = selectedCities.join(',');
+        const qualitiesStr = qualities.join(',');
+
+        const url = `${API_BASE_URL}${itemIdsStr}.json?locations=${locationsStr}&qualities=${qualitiesStr}`;
+
+        console.log(`Haciendo petición a: ${url}`);
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+            }
+            const data = await response.json();
+
             if (data && data.length > 0) {
-                // Si hay datos, crea una tabla para mostrarlos
-                let tableHTML = '<table><thead><tr>';
-                
-                // Crea las cabeceras de la tabla (columnas)
-                // Usamos un conjunto para evitar columnas duplicadas si los objetos tienen campos ligeramente diferentes
-                const allKeys = new Set();
-                data.forEach(item => {
-                    Object.keys(item).forEach(key => allKeys.add(key));
-                });
-                const columns = Array.from(allKeys).sort(); // Ordena las columnas alfabéticamente
-
-                columns.forEach(key => {
-                    tableHTML += `<th>${key.replace(/_/g, ' ').toUpperCase()}</th>`; // Formatea el nombre de la columna
-                });
-                tableHTML += '</tr></thead><tbody>';
-
-                // Rellena las filas de la tabla con los datos
-                data.forEach(item => {
-                    tableHTML += '<tr>';
-                    columns.forEach(key => {
-                        let value = item[key];
-                        // Formateo especial para números y fechas
-                        if (typeof value === 'number' && key.includes('price')) {
-                            value = value.toLocaleString(); // Formato de número con comas
-                        } else if (key.includes('date') || key.includes('timestamp')) {
-                             // Intenta formatear fechas si son ISO strings
-                            try {
-                                const date = new Date(value);
-                                if (!isNaN(date.getTime())) {
-                                    value = date.toLocaleString(); // Formato de fecha y hora local
-                                }
-                            } catch (e) {
-                                // No es una fecha válida, usa el valor original
-                            }
-                        }
-                        tableHTML += `<td>${value !== undefined ? value : ''}</td>`;
-                    });
-                    tableHTML += '</tr>';
-                });
-
-                tableHTML += '</tbody></table>';
-                dataContainer.innerHTML = tableHTML;
+                renderTable(data);
             } else {
-                dataContainer.innerHTML = '<p>No se encontraron datos para los ítems y filtros seleccionados.</p>';
+                dataContainer.innerHTML = '<p>No se encontraron datos para la combinación de ítems/ubicaciones/calidades seleccionada.</p>';
             }
-        })
-        .catch(error => {
-            // Manejo de errores de la petición
-            console.error('Hubo un problema con la petición Fetch:', error);
-            dataContainer.innerHTML = `<p>Error al cargar los datos: ${error.message}. Por favor, inténtalo de nuevo más tarde.</p>`;
+        } catch (error) {
+            console.error('Hubo un problema al obtener los datos:', error);
+            dataContainer.innerHTML = `<p style="color: red;">Error al cargar los datos: ${error.message}. Por favor, inténtalo de nuevo.</p>`;
+        }
+    }
+
+    // --- Función para renderizar la tabla de datos ---
+    function renderTable(data) {
+        let tableHTML = '<table><thead><tr>';
+
+        // Determinar todas las posibles columnas dinámicamente
+        const allKeys = new Set();
+        data.forEach(item => {
+            Object.keys(item).forEach(key => allKeys.add(key));
         });
+        // Definir un orden preferido de columnas si existe, de lo contrario, alfabético
+        const preferredOrder = ['item_id', 'city', 'quality', 'sell_price_min', 'sell_price_min_date', 'buy_price_max', 'buy_price_max_date', 'sell_price_max', 'buy_price_min', 'timestamp'];
+        const columns = preferredOrder.filter(key => allKeys.has(key)).concat(Array.from(allKeys).filter(key => !preferredOrder.includes(key)).sort());
+
+
+        columns.forEach(key => {
+            // Un poco de formato para las cabeceras (opcional)
+            let headerText = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); // Convertir snake_case a Title Case
+            if (key === 'item_id') headerText = 'Item';
+            if (key === 'sell_price_min') headerText = 'Venta Mín.';
+            if (key === 'buy_price_max') headerText = 'Compra Máx.';
+            if (key === 'sell_price_min_date') headerText = 'Fecha Venta Mín.';
+            if (key === 'buy_price_max_date') headerText = 'Fecha Compra Máx.';
+            
+            tableHTML += `<th>${headerText}</th>`;
+        });
+        tableHTML += '</tr></thead><tbody>';
+
+        data.forEach(item => {
+            tableHTML += '<tr>';
+            columns.forEach(key => {
+                let value = item[key];
+                
+                // Formateo especial para valores
+                if (key === 'item_id' && allItems[value]) {
+                    value = allItems[value]; // Mostrar el nombre legible del ítem
+                } else if (key === 'city' && allLocations[value]) {
+                    value = allLocations[value]; // Mostrar el nombre legible de la ciudad
+                } else if (typeof value === 'number' && (key.includes('price') || key.includes('amount'))) {
+                    value = value.toLocaleString(); // Formato de número con separador de miles
+                } else if ((key.includes('date') || key.includes('timestamp')) && value) {
+                    try {
+                        const date = new Date(value);
+                        if (!isNaN(date.getTime())) {
+                            value = date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }); // Formato local de fecha y hora
+                        }
+                    } catch (e) {
+                        // Si no es una fecha válida, se usa el valor original
+                    }
+                } else if (key === 'quality') {
+                    const qualityNames = { 1: 'Normal', 2: 'Bueno', 3: 'Excepcional', 4: 'Excelente', 5: 'Sobresaliente' };
+                    value = qualityNames[value] || value;
+                }
+
+                tableHTML += `<td>${value !== undefined && value !== null ? value : ''}</td>`;
+            });
+            tableHTML += '</tr>';
+        });
+
+        tableHTML += '</tbody></table>';
+        dataContainer.innerHTML = tableHTML;
+    }
+
+    // --- Event Listeners ---
+    fetchDataButton.addEventListener('click', getAlbionMarketData);
+
+    // --- Iniciar la carga de selectores al cargar la página ---
+    initializeSelectors();
 });
