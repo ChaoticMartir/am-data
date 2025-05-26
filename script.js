@@ -19,20 +19,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             return await response.json();
         } catch (error) {
             console.error(`No se pudo cargar el archivo ${filename}:`, error);
-            dataContainer.innerHTML = `<p style="color: red;">Error: No se pudo cargar la lista de ${filename.includes('item') ? 'ítems' : 'ciudades'}. Asegúrate de que los archivos estén en la misma carpeta.</p>`;
+            dataContainer.innerHTML = `<p style="color: red;">Error: No se pudo cargar la lista de ${filename.includes('items') ? 'ítems' : 'ciudades'}. Asegúrate de que los archivos estén en la misma carpeta.</p>`;
             return null;
         }
     }
 
     // --- Función para poblar los selectores ---
-    function populateSelect(selectElement, data, valueKey, textKey) {
+    function populateSelect(selectElement, data) {
         selectElement.innerHTML = ''; // Limpiar opciones existentes
-        // Opción predeterminada (opcional, si no usas 'multiple' con tamaño)
-        // const defaultOption = document.createElement('option');
-        // defaultOption.value = '';
-        // defaultOption.textContent = `Selecciona ${valueKey === 'UniqueName' ? 'un ítem' : 'una ciudad'}`;
-        // selectElement.appendChild(defaultOption);
-
+        
         // Ordenar los datos alfabéticamente por el texto a mostrar
         const sortedData = Object.entries(data).sort(([, a], [, b]) => a.localeCompare(b));
 
@@ -48,23 +43,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function initializeSelectors() {
         dataContainer.innerHTML = '<p>Cargando listas de ítems y ciudades...</p>';
         
-        const itemData = await loadJson('items.json');
-        const locationData = await loadJson('world.json');
+        // Cargar items.json
+        const itemData = await loadJson('items.json'); // Changed filename
+        // Cargar world.json
+        const locationData = await loadJson('world.json'); // Changed filename
 
         if (itemData) {
+            // Asumiendo que items.json es un objeto { "ITEM_ID": "Item Name", ... }
             allItems = itemData;
-            populateSelect(itemSelect, allItems, 'UniqueName', 'LocalizedNames');
+            populateSelect(itemSelect, allItems);
         } else {
             console.error("No se pudieron cargar los datos de ítems.");
         }
 
         if (locationData) {
-            // El JSON de ubicaciones es un array de objetos, necesitamos mapearlo a un objeto {id: name}
+            // Asumiendo que world.json es un array de objetos como:
+            // [{ "UniqueName": "ForestCross", "LocalizedName": "Forest Cross" }, ...]
             allLocations = locationData.reduce((acc, loc) => {
                 acc[loc.UniqueName] = loc.LocalizedName;
                 return acc;
             }, {});
-            populateSelect(citySelect, allLocations, 'UniqueName', 'LocalizedName');
+            populateSelect(citySelect, allLocations);
         } else {
             console.error("No se pudieron cargar los datos de ubicaciones.");
         }
