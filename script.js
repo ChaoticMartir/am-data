@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const DEFAULT_LANGUAGE = 'ES-ES'; // Change this if you prefer another language (e.g., 'EN-US')
 
     // --- CITIES EXPLICITLY ALLOWED BY USER (CORRECTED UNIQUE NAMES) ---
+    // Keeping this defined, but temporarily NOT used in filtering for debugging
     const ALLOWED_CITIES_FOR_DROPDOWN = [
         "BRECILIEN",
         "FORTSTERLING",
@@ -22,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         "THETFORD",
         "CAERLEON"
     ];
-    const allowedCitiesSet = new Set(ALLOWED_CITIES_FOR_DROPDOWN);
+    // const allowedCitiesSet = new Set(ALLOWED_CITIES_FOR_DROPDOWN); // Temporarily not used
 
 
     // --- Función para cargar JSON local ---
@@ -30,12 +31,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const response = await fetch(filename);
             if (!response.ok) {
-                throw new Error(`Error al cargar ${filename}: ${response.statusText}`);
+                const errorText = `Error HTTP (${response.status}) al cargar ${filename}: ${response.statusText}`;
+                console.error(errorText);
+                dataContainer.innerHTML += `<p style="color: red;">${errorText}</p>`; // Append error
+                return null;
             }
-            return await response.json();
+            const data = await response.json();
+            console.log(`Successfully loaded ${filename}. Data size: ${JSON.stringify(data).length} bytes.`); // Log success and size
+            if (!Array.isArray(data) || data.length === 0) {
+                 const warningText = `Advertencia: El archivo ${filename} se cargó pero está vacío o no es un array válido.`;
+                 console.warn(warningText);
+                 dataContainer.innerHTML += `<p style="color: orange;">${warningText}</p>`; // Append warning
+            }
+            return data;
         } catch (error) {
-            console.error(`No se pudo cargar el archivo ${filename}:`, error);
-            dataContainer.innerHTML = `<p style="color: red;">Error: No se pudo cargar la lista de ${filename.includes('items') ? 'ítems' : 'ciudades'}. Asegúrate de que los archivos estén en la misma carpeta.</p>`;
+            const errorText = `Error fatal al cargar el archivo ${filename}: ${error.message}.`;
+            console.error(errorText, error);
+            dataContainer.innerHTML += `<p style="color: red;">${errorText} Asegúrate de que los archivos estén en la misma carpeta y accesibles.</p>`; // Append fatal error
             return null;
         }
     }
@@ -46,84 +58,106 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const sortedData = Object.entries(data).sort(([, a], [, b]) => a.localeCompare(b));
 
-        for (const [id, name] of sortedData) {
+        if (sortedData.length === 0) {
             const option = document.createElement('option');
-            option.value = id;
-            option.textContent = name;
+            option.value = '';
+            option.textContent = `No hay ${selectElement.id === 'item-select' ? 'ítems' : 'ciudades'} disponibles.`;
             selectElement.appendChild(option);
+            selectElement.disabled = true; // Disable if empty
+        } else {
+            selectElement.disabled = false; // Enable if not empty
+            for (const [id, name] of sortedData) {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = name;
+                selectElement.appendChild(option);
+            }
         }
+        console.log(`Populated ${selectElement.id} with ${sortedData.length} entries.`);
     }
 
     // Function to filter and populate item dropdown
     function filterAndPopulateItems(searchTerm = '') {
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
         const filteredItems = {};
+        let count = 0;
         for (const id in rawAllItems) {
-            // Ensure rawAllItems[id] is a string before calling toLowerCase
             if (typeof rawAllItems[id] === 'string' && rawAllItems[id].toLowerCase().includes(lowerCaseSearchTerm)) {
                 filteredItems[id] = rawAllItems[id];
+                count++;
             }
         }
         populateSelect(itemSelect, filteredItems);
+        console.log(`Filtered items: <span class="math-inline">\{count\} found for search term "</span>{searchTerm}"`);
     }
 
     // --- Cargar y poblar selectores al inicio ---
     async function initializeSelectors() {
-        dataContainer.innerHTML = '<p>Cargando listas de ítems y ciudades...</p>';
+        dataContainer.innerHTML = '<p>Cargando listas de ítems y ciudades...</p>'; // Initial loading message
         
         const rawItemData = await loadJson('items.json');
         const rawLocationData = await loadJson('world.json');
 
-        if (rawItemData) {
+        // --- Process Items ---
+        if (rawItemData && Array.isArray(rawItemData) && rawItemData.length > 0) {
             rawAllItems = rawItemData.reduce((acc, item) => {
-                let uniqueName = null;
-                // Try to extract uniqueName from LocalizationNameVariable, handling potential errors
+                let uniqueId = null;
                 if (typeof item.LocalizationNameVariable === 'string' && item.LocalizationNameVariable.startsWith('@ITEMS_')) {
-                    uniqueName = item.LocalizationNameVariable.replace('@ITEMS_', '');
-                } else if (typeof item.UniqueName === 'string') { // Fallback if some entries use UniqueName directly
-                    uniqueName = item.UniqueName;
+                    uniqueId = item.LocalizationNameVariable.replace('@ITEMS_', '');
+                } else if (typeof item.UniqueName === 'string' && item.UniqueName.trim() !== '') {
+                    uniqueId = item.UniqueName;
                 }
 
-                let localizedName = null;
-                // Try to extract localizedName from LocalizedNames, handling potential errors
+                let displayDisplayName = null;
                 if (item.LocalizedNames && typeof item.LocalizedNames === 'object') {
-                    localizedName = item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'];
+                    displayDisplayName = item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'];
                 }
                 
-                // Final fallback if localizedName is still not a valid string
-                if (typeof localizedName !== 'string' || localizedName.trim() === '') {
-                    localizedName = uniqueName || `Unknown Item (${item.LocalizationNameVariable || item.UniqueName || 'No ID'})`;
-                    // If even uniqueName is bad, use a generic placeholder
-                    if (typeof localizedName !== 'string' || localizedName.trim() === '') {
-                        localizedName = 'Missing Name';
+                if (typeof displayDisplayName !== 'string' || displayDisplayName.trim() === '') {
+                    displayDisplayName = uniqueId || `Item ID: ${uniqueId || 'N/A'}`;
+                    if (typeof displayDisplayName !== 'string' || displayDisplayName.trim() === '') {
+                        displayDisplayName = 'Missing Name';
                     }
                 }
-                
-                // Only add to accumulator if uniqueName is valid and not empty
-                if (uniqueName && typeof uniqueName === 'string' && uniqueName.trim() !== '') {
-                    acc[uniqueName] = localizedName;
+
+                if (uniqueId && typeof uniqueId === 'string' && uniqueId.trim() !== '') {
+                    acc[uniqueId] = displayDisplayName;
                 }
                 return acc;
             }, {});
             
-            filterAndPopulateItems(); // Populate the item select initially with all items
+            console.log(`Raw All Items loaded: ${Object.keys(rawAllItems).length} entries.`);
+            filterAndPopulateItems();
         } else {
-            console.error("No se pudieron cargar los datos de ítems.");
+            console.error("No se pudieron procesar los datos de ítems (archivo vacío o inválido después de cargar).");
+            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ítems está vacía o es inválida después de procesar.</p>';
+            populateSelect(itemSelect, {});
         }
 
-        if (rawLocationData) {
+        // --- Process Cities ---
+        if (rawLocationData && Array.isArray(rawLocationData) && rawLocationData.length > 0) {
             allLocations = rawLocationData.reduce((acc, loc) => {
-                if (loc.UniqueName && allowedCitiesSet.has(loc.UniqueName)) {
-                    acc[loc.UniqueName] = loc.UniqueName;
+                if (loc.UniqueName && typeof loc.UniqueName === 'string' && loc.UniqueName.trim() !== '') {
+                    // Temporarily keeping the filter broad for debugging.
+                    // If you see many unexpected entries, we'll need to refine this.
+                    if (!loc.UniqueName.startsWith('ISLAND-') && loc.UniqueName !== 'Debug') {
+                        acc[loc.UniqueName] = loc.UniqueName;
+                    }
                 }
                 return acc;
             }, {});
+            console.log(`All Locations loaded (unfiltered for debug): ${Object.keys(allLocations).length} entries.`);
             populateSelect(citySelect, allLocations);
         } else {
-            console.error("No se pudieron cargar los datos de ubicaciones.");
+            console.error("No se pudieron procesar los datos de ubicaciones (archivo vacío o inválido después de cargar).");
+            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ciudades está vacía o es inválida después de procesar.</p>';
+            populateSelect(citySelect, {});
         }
         
-        dataContainer.innerHTML = '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
+        // Final message only if no critical errors happened
+        if (!dataContainer.innerHTML.includes('Error:') && !dataContainer.innerHTML.includes('Advertencia:')) {
+            dataContainer.innerHTML += '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
+        }
     }
 
     // --- Función para obtener los valores seleccionados de un selector múltiple ---
@@ -148,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const locationsStr = selectedCities.join(',');
         const qualitiesStr = qualities.join(',');
 
-        const url = `${API_BASE_URL}${itemIdsStr}.json?locations=${locationsStr}&qualities=${qualitiesStr}`;
+        const url = `<span class="math-inline">\{API\_BASE\_URL\}</span>{itemIdsStr}.json?locations=<span class="math-inline">\{locationsStr\}&qualities\=</span>{qualitiesStr}`;
 
         console.log(`Haciendo petición a: ${url}`);
 
@@ -166,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } catch (error) {
             console.error('Hubo un problema al obtener los datos:', error);
-            dataContainer.innerHTML = `<p style="color: red;">Error al cargar los datos: ${error.message}. Por favor, inténtalo de nuevo.</p>`;
+            dataContainer.innerHTML = `<p style="color: red;">Error al cargar los datos de la API: ${error.message}. Por favor, inténtalo de nuevo.</p>`;
         }
     }
 
@@ -199,7 +233,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             columns.forEach(key => {
                 let value = item[key];
                 
-                // Use rawAllItems for lookup to display full item name
                 if (key === 'item_id' && rawAllItems[value]) {
                     value = rawAllItems[value];
                 } else if (key === 'city' && allLocations[value]) {
@@ -219,23 +252,3 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const qualityNames = { 1: 'Normal', 2: 'Bueno', 3: 'Excepcional', 4: 'Excelente', 5: 'Sobresaliente' };
                     value = qualityNames[value] || value;
                 }
-
-                tableHTML += `<td>${value !== undefined && value !== null ? value : ''}</td>`;
-            });
-            tableHTML += '</tr>';
-        });
-
-        tableHTML += '</tbody></table>';
-        dataContainer.innerHTML = tableHTML;
-    }
-
-    // --- Event Listeners ---
-    fetchDataButton.addEventListener('click', getAlbionMarketData);
-
-    itemSearchInput.addEventListener('keyup', (event) => {
-        filterAndPopulateItems(event.target.value);
-    });
-
-    // --- Iniciar la carga de selectores al cargar la página ---
-    initializeSelectors();
-});
