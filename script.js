@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const DEFAULT_LANGUAGE = 'ES-ES'; // Change this if you prefer another language (e.g., 'EN-US')
 
     // --- CITIES EXPLICITLY ALLOWED BY USER (CORRECTED UNIQUE NAMES) ---
-    // Keeping this defined, but temporarily NOT used in filtering for debugging
     const ALLOWED_CITIES_FOR_DROPDOWN = [
         "BRECILIEN",
         "FORTSTERLING",
@@ -23,7 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         "THETFORD",
         "CAERLEON"
     ];
-    // const allowedCitiesSet = new Set(ALLOWED_CITIES_FOR_DROPDOWN); // Temporarily not used
+    const allowedCitiesSet = new Set(ALLOWED_CITIES_FOR_DROPDOWN);
 
 
     // --- Función para cargar JSON local ---
@@ -31,16 +30,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const response = await fetch(filename);
             if (!response.ok) {
-                // If response is not OK, log more details
-                console.error(`Error HTTP al cargar ${filename}: ${response.status} - ${response.statusText}`);
                 throw new Error(`Error al cargar ${filename}: ${response.statusText}`);
             }
-            const data = await response.json();
-            console.log(`Successfully loaded ${filename}. First 500 characters:`, JSON.stringify(data).substring(0, 500)); // Log part of content
-            return data;
+            return await response.json();
         } catch (error) {
             console.error(`No se pudo cargar el archivo ${filename}:`, error);
-            dataContainer.innerHTML = `<p style="color: red;">Error: No se pudo cargar la lista de ${filename.includes('items') ? 'ítems' : 'ciudades'}. Asegúrate de que los archivos estén en la misma carpeta y accesibles.</p>`;
+            dataContainer.innerHTML = `<p style="color: red;">Error: No se pudo cargar la lista de ${filename.includes('items') ? 'ítems' : 'ciudades'}. Asegúrate de que los archivos estén en la misma carpeta.</p>`;
             return null;
         }
     }
@@ -51,38 +46,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const sortedData = Object.entries(data).sort(([, a], [, b]) => a.localeCompare(b));
 
-        if (sortedData.length === 0) {
+        for (const [id, name] of sortedData) {
             const option = document.createElement('option');
-            option.value = '';
-            option.textContent = `No hay ${selectElement.id === 'item-select' ? 'ítems' : 'ciudades'} disponibles.`;
+            option.value = id;
+            option.textContent = name;
             selectElement.appendChild(option);
-            selectElement.disabled = true; // Disable if empty
-        } else {
-            selectElement.disabled = false; // Enable if not empty
-            for (const [id, name] of sortedData) {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = name;
-                selectElement.appendChild(option);
-            }
         }
-        console.log(`Populated ${selectElement.id} with ${sortedData.length} entries.`);
     }
 
     // Function to filter and populate item dropdown
     function filterAndPopulateItems(searchTerm = '') {
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
         const filteredItems = {};
-        let count = 0;
         for (const id in rawAllItems) {
             // Ensure rawAllItems[id] is a string before calling toLowerCase
             if (typeof rawAllItems[id] === 'string' && rawAllItems[id].toLowerCase().includes(lowerCaseSearchTerm)) {
                 filteredItems[id] = rawAllItems[id];
-                count++;
             }
         }
         populateSelect(itemSelect, filteredItems);
-        console.log(`Filtered items: ${count} found for search term "${searchTerm}"`);
     }
 
     // --- Cargar y poblar selectores al inicio ---
@@ -92,64 +74,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rawItemData = await loadJson('items.json');
         const rawLocationData = await loadJson('world.json');
 
-        // --- Process Items ---
-        if (rawItemData && Array.isArray(rawItemData) && rawItemData.length > 0) {
+        if (rawItemData) {
             rawAllItems = rawItemData.reduce((acc, item) => {
-                let uniqueId = null;
-                // Prefer LocalizationNameVariable after stripping prefix, fallback to UniqueName
+                let uniqueName = null;
+                // Try to extract uniqueName from LocalizationNameVariable, handling potential errors
                 if (typeof item.LocalizationNameVariable === 'string' && item.LocalizationNameVariable.startsWith('@ITEMS_')) {
-                    uniqueId = item.LocalizationNameVariable.replace('@ITEMS_', '');
-                } else if (typeof item.UniqueName === 'string' && item.UniqueName.trim() !== '') {
-                    uniqueId = item.UniqueName;
+                    uniqueName = item.LocalizationNameVariable.replace('@ITEMS_', '');
+                } else if (typeof item.UniqueName === 'string') { // Fallback if some entries use UniqueName directly
+                    uniqueName = item.UniqueName;
                 }
 
-                let displayDisplayName = null;
-                // Prefer localized names, fallback to uniqueId
+                let localizedName = null;
+                // Try to extract localizedName from LocalizedNames, handling potential errors
                 if (item.LocalizedNames && typeof item.LocalizedNames === 'object') {
-                    displayDisplayName = item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'];
+                    localizedName = item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'];
                 }
                 
-                // Ensure display name is a string, fallback if empty
-                if (typeof displayDisplayName !== 'string' || displayDisplayName.trim() === '') {
-                    displayDisplayName = uniqueId || `Item ID: ${uniqueId || 'N/A'}`; // Fallback to uniqueId or placeholder
+                // Final fallback if localizedName is still not a valid string
+                if (typeof localizedName !== 'string' || localizedName.trim() === '') {
+                    localizedName = uniqueName || `Unknown Item (${item.LocalizationNameVariable || item.UniqueName || 'No ID'})`;
+                    // If even uniqueName is bad, use a generic placeholder
+                    if (typeof localizedName !== 'string' || localizedName.trim() === '') {
+                        localizedName = 'Missing Name';
+                    }
                 }
-
-                if (uniqueId && typeof uniqueId === 'string' && uniqueId.trim() !== '') {
-                    acc[uniqueId] = displayDisplayName;
+                
+                // Only add to accumulator if uniqueName is valid and not empty
+                if (uniqueName && typeof uniqueName === 'string' && uniqueName.trim() !== '') {
+                    acc[uniqueName] = localizedName;
                 }
                 return acc;
             }, {});
             
-            console.log(`Raw All Items loaded: ${Object.keys(rawAllItems).length} entries.`);
             filterAndPopulateItems(); // Populate the item select initially with all items
         } else {
-            console.error("No se pudieron cargar los datos de ítems o el archivo está vacío/inválido.");
-            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ítems está vacía o es inválida.</p>';
-            populateSelect(itemSelect, {}); // Ensure dropdown is empty
+            console.error("No se pudieron cargar los datos de ítems.");
         }
 
-        // --- Process Cities ---
-        if (rawLocationData && Array.isArray(rawLocationData) && rawLocationData.length > 0) {
+        if (rawLocationData) {
             allLocations = rawLocationData.reduce((acc, loc) => {
-                // Temporarily show all UniqueNames from world.json for debugging
-                // Removed: allowedCitiesSet.has(loc.UniqueName)
-                if (loc.UniqueName && typeof loc.UniqueName === 'string' && loc.UniqueName.trim() !== '') {
-                    // Filter out obvious non-market locations if needed, but keep it broad for debugging
-                    if (!loc.UniqueName.startsWith('ISLAND-') && loc.UniqueName !== 'Debug') {
-                        acc[loc.UniqueName] = loc.UniqueName; // Use UniqueName for display as well
-                    }
+                if (loc.UniqueName && allowedCitiesSet.has(loc.UniqueName)) {
+                    acc[loc.UniqueName] = loc.UniqueName;
                 }
                 return acc;
             }, {});
-            console.log(`All Locations loaded (unfiltered for debug): ${Object.keys(allLocations).length} entries.`);
             populateSelect(citySelect, allLocations);
         } else {
-            console.error("No se pudieron cargar los datos de ubicaciones o el archivo está vacío/inválido.");
-            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ciudades está vacía o es inválida.</p>';
-            populateSelect(citySelect, {}); // Ensure dropdown is empty
+            console.error("No se pudieron cargar los datos de ubicaciones.");
         }
         
-        dataContainer.innerHTML += '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
+        dataContainer.innerHTML = '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
     }
 
     // --- Función para obtener los valores seleccionados de un selector múltiple ---
