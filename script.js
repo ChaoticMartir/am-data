@@ -200,19 +200,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // --- Display Data in a Table (No change needed) ---
+    // --- Display Data in a Table ---
     function displayData(data) {
-        if (data.length === 0) {
-            dataContainer.innerHTML = '<p>No se encontraron datos para la selección actual.</p>';
+        // Filter out items where sell_price_min or buy_price_min is 0
+        const filteredData = data.filter(item =>
+            (item.sell_price_min > 0 || item.buy_price_min > 0)
+        );
+
+        if (filteredData.length === 0) {
+            dataContainer.innerHTML = '<p>No se encontraron datos válidos para la selección actual (precios de venta/compra mínimos son 0 o no hay datos).</p>';
             return;
         }
 
+        // Define columns to display, excluding date columns
         const columns = [
             'item_id', 'city', 'quality',
-            'sell_price_min', 'sell_price_min_date',
-            'sell_price_max', 'sell_price_max_date',
-            'buy_price_min', 'buy_price_min_date',
-            'buy_price_max', 'buy_price_max_date'
+            'sell_price_min',
+            'sell_price_max',
+            'buy_price_min',
+            'buy_price_max'
         ];
 
         let tableHTML = '<table><thead><tr>';
@@ -222,14 +228,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (key === 'city') headerText = 'Ciudad';
             if (key === 'quality') headerText = 'Calidad';
             if (key === 'sell_price_min') headerText = 'Precio Venta Mín.';
-            if (key === 'sell_price_min_date') headerText = 'Fecha Venta Mín.';
-            if (key === 'buy_price_max_date') headerText = 'Fecha Compra Máx.';
+            if (key === 'sell_price_max') headerText = 'Precio Venta Máx.';
+            if (key === 'buy_price_min') headerText = 'Precio Compra Mín.';
+            if (key === 'buy_price_max') headerText = 'Precio Compra Máx.';
 
             tableHTML += `<th>${headerText}</th>`;
         });
         tableHTML += '</tr></thead><tbody>';
 
-        data.forEach(item => {
+        filteredData.forEach(item => {
             tableHTML += '<tr>';
             columns.forEach(key => {
                 let value = item[key];
@@ -240,14 +247,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     value = value;
                 } else if (typeof value === 'number' && (key.includes('price'))) {
                     value = value.toLocaleString();
-                } else if (key.includes('date')) {
-                    try {
-                        value = new Date(value).toLocaleString('es-ES');
-                    } catch (e) { /* keep original value */ }
                 } else if (key === 'quality') {
                     const qualityNames = { 1: 'Normal', 2: 'Buena', 3: 'Excepcional', 4: 'Excelente', 5: 'Obra Maestra' };
                     value = qualityNames[value] || value;
                 }
+                // Date columns are already excluded from 'columns' array, so no need for 'else if (key.includes('date'))'
 
                 tableHTML += `<td>${value}</td>`;
             });
