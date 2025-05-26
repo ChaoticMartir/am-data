@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         populateSelect(itemSelect, filteredItems);
-        console.log(`Filtered items: <span class="math-inline">\{count\} found for search term "</span>{searchTerm}"`);
+        console.log(`Filtered items: ${count} found for search term "${searchTerm}"`);
     }
 
     // --- Cargar y poblar selectores al inicio ---
@@ -100,3 +100,168 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (typeof item.LocalizationNameVariable === 'string' && item.LocalizationNameVariable.startsWith('@ITEMS_')) {
                     uniqueId = item.LocalizationNameVariable.replace('@ITEMS_', '');
                 } else if (typeof item.UniqueName === 'string' && item.UniqueName.trim() !== '') {
+                    uniqueId = item.UniqueName;
+                }
+
+                let displayDisplayName = null;
+                // Prefer localized names, fallback to uniqueId
+                if (item.LocalizedNames && typeof item.LocalizedNames === 'object') {
+                    displayDisplayName = item.LocalizedNames[DEFAULT_LANGUAGE] || item.LocalizedNames['EN-US'];
+                }
+                
+                // Ensure display name is a string, fallback if empty
+                if (typeof displayDisplayName !== 'string' || displayDisplayName.trim() === '') {
+                    displayDisplayName = uniqueId || `Item ID: ${uniqueId || 'N/A'}`; // Fallback to uniqueId or placeholder
+                }
+
+                if (uniqueId && typeof uniqueId === 'string' && uniqueId.trim() !== '') {
+                    acc[uniqueId] = displayDisplayName;
+                }
+                return acc;
+            }, {});
+            
+            console.log(`Raw All Items loaded: ${Object.keys(rawAllItems).length} entries.`);
+            filterAndPopulateItems(); // Populate the item select initially with all items
+        } else {
+            console.error("No se pudieron cargar los datos de ítems o el archivo está vacío/inválido.");
+            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ítems está vacía o es inválida.</p>';
+            populateSelect(itemSelect, {}); // Ensure dropdown is empty
+        }
+
+        // --- Process Cities ---
+        if (rawLocationData && Array.isArray(rawLocationData) && rawLocationData.length > 0) {
+            allLocations = rawLocationData.reduce((acc, loc) => {
+                // Temporarily show all UniqueNames from world.json for debugging
+                // Removed: allowedCitiesSet.has(loc.UniqueName)
+                if (loc.UniqueName && typeof loc.UniqueName === 'string' && loc.UniqueName.trim() !== '') {
+                    // Filter out obvious non-market locations if needed, but keep it broad for debugging
+                    if (!loc.UniqueName.startsWith('ISLAND-') && loc.UniqueName !== 'Debug') {
+                        acc[loc.UniqueName] = loc.UniqueName; // Use UniqueName for display as well
+                    }
+                }
+                return acc;
+            }, {});
+            console.log(`All Locations loaded (unfiltered for debug): ${Object.keys(allLocations).length} entries.`);
+            populateSelect(citySelect, allLocations);
+        } else {
+            console.error("No se pudieron cargar los datos de ubicaciones o el archivo está vacío/inválido.");
+            dataContainer.innerHTML += '<p style="color: red;">Error: La lista de ciudades está vacía o es inválida.</p>';
+            populateSelect(citySelect, {}); // Ensure dropdown is empty
+        }
+        
+        dataContainer.innerHTML += '<p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>';
+    }
+
+    // --- Función para obtener los valores seleccionados de un selector múltiple ---
+    function getSelectedOptions(selectElement) {
+        return Array.from(selectElement.selectedOptions).map(option => option.value);
+    }
+
+    // --- Función para obtener datos del API de Albion Online ---
+    async function getAlbionMarketData() {
+        const selectedItems = getSelectedOptions(itemSelect);
+        const selectedCities = getSelectedOptions(citySelect);
+        const qualities = [1, 2, 3, 4, 5]; // Puedes hacer esto seleccionable también si quieres
+
+        if (selectedItems.length === 0 || selectedCities.length === 0) {
+            dataContainer.innerHTML = '<p style="color: orange;">Por favor, selecciona al menos un ítem y una ciudad.</p>';
+            return;
+        }
+
+        dataContainer.innerHTML = '<p>Obteniendo datos... Esto puede tomar un momento.</p>';
+
+        const itemIdsStr = selectedItems.join(',');
+        const locationsStr = selectedCities.join(',');
+        const qualitiesStr = qualities.join(',');
+
+        const url = `${API_BASE_URL}${itemIdsStr}.json?locations=${locationsStr}&qualities=${qualitiesStr}`;
+
+        console.log(`Haciendo petición a: ${url}`);
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+            }
+            const data = await response.json();
+
+            if (data && data.length > 0) {
+                renderTable(data);
+            } else {
+                dataContainer.innerHTML = '<p>No se encontraron datos para la combinación de ítems/ubicaciones/calidades seleccionada.</p>';
+            }
+        } catch (error) {
+            console.error('Hubo un problema al obtener los datos:', error);
+            dataContainer.innerHTML = `<p style="color: red;">Error al cargar los datos: ${error.message}. Por favor, inténtalo de nuevo.</p>`;
+        }
+    }
+
+    // --- Función para renderizar la tabla de datos ---
+    function renderTable(data) {
+        let tableHTML = '<table><thead><tr>';
+
+        const allKeys = new Set();
+        data.forEach(item => {
+            Object.keys(item).forEach(key => allKeys.add(key));
+        });
+        const preferredOrder = ['item_id', 'city', 'quality', 'sell_price_min', 'sell_price_min_date', 'buy_price_max', 'buy_price_max_date', 'sell_price_max', 'buy_price_min', 'timestamp'];
+        const columns = preferredOrder.filter(key => allKeys.has(key)).concat(Array.from(allKeys).filter(key => !preferredOrder.includes(key)).sort());
+
+
+        columns.forEach(key => {
+            let headerText = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            if (key === 'item_id') headerText = 'Item';
+            if (key === 'sell_price_min') headerText = 'Venta Mín.';
+            if (key === 'buy_price_max') headerText = 'Compra Máx.';
+            if (key === 'sell_price_min_date') headerText = 'Fecha Venta Mín.';
+            if (key === 'buy_price_max_date') headerText = 'Fecha Compra Máx.';
+            
+            tableHTML += `<th>${headerText}</th>`;
+        });
+        tableHTML += '</tr></thead><tbody>';
+
+        data.forEach(item => {
+            tableHTML += '<tr>';
+            columns.forEach(key => {
+                let value = item[key];
+                
+                // Use rawAllItems for lookup to display full item name
+                if (key === 'item_id' && rawAllItems[value]) {
+                    value = rawAllItems[value];
+                } else if (key === 'city' && allLocations[value]) {
+                    value = allLocations[value];
+                } else if (typeof value === 'number' && (key.includes('price') || key.includes('amount'))) {
+                    value = value.toLocaleString();
+                } else if ((key.includes('date') || key.includes('timestamp')) && value) {
+                    try {
+                        const date = new Date(value);
+                        if (!isNaN(date.getTime())) {
+                            value = date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+                        }
+                    } catch (e) {
+                        // If not a valid date, use original value
+                    }
+                } else if (key === 'quality') {
+                    const qualityNames = { 1: 'Normal', 2: 'Bueno', 3: 'Excepcional', 4: 'Excelente', 5: 'Sobresaliente' };
+                    value = qualityNames[value] || value;
+                }
+
+                tableHTML += `<td>${value !== undefined && value !== null ? value : ''}</td>`;
+            });
+            tableHTML += '</tr>';
+        });
+
+        tableHTML += '</tbody></table>';
+        dataContainer.innerHTML = tableHTML;
+    }
+
+    // --- Event Listeners ---
+    fetchDataButton.addEventListener('click', getAlbionMarketData);
+
+    itemSearchInput.addEventListener('keyup', (event) => {
+        filterAndPopulateItems(event.target.value);
+    });
+
+    // --- Iniciar la carga de selectores al cargar la página ---
+    initializeSelectors();
+});
