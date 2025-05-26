@@ -1,47 +1,22 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mercado de Albion Online</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <header>
-        <h1>Precios de Mercado de Albion Online</h1>
-        <p>Selecciona ítems y ciudades para ver sus precios.</p>
-    </header>
-
-    <main>
-        <div class="controls">
-            <div class="select-group">
+<div class="select-group">
                 <label for="item-search">Buscar Ítem:</label>
                 <input type="text" id="item-search" placeholder="Escribe para buscar ítems...">
                 <label for="item-select">Selecciona Ítems:</label>
                 <select id="item-select" multiple size="10">
-                    </select>
+                </select>
                 <p class="hint">Mantén Ctrl/Cmd para seleccionar múltiples.</p>
+            </div>
+
+            <div class="select-group">
+                <label for="item-type-select">Filtrar por Tipo:</label>
+                <select id="item-type-select">
+                    <option value="All">Todos los Tipos</option>
+                    </select>
             </div>
 
             <div class="select-group">
                 <label for="city-select">Selecciona Ciudades:</label>
                 <select id="city-select" multiple size="10">
-                    </select>
-                 <p class="hint">Mantén Ctrl/Cmd para seleccionar múltiples.</p>
+                </select>
+                <p class="hint">Mantén Ctrl/Cmd para seleccionar múltiples.</p>
             </div>
-
-            <button id="fetch-data-button">Obtener Datos del Mercado</button>
-        </div>
-
-        <div id="data-container">
-            <p>Selecciona tus opciones y haz clic en "Obtener Datos del Mercado".</p>
-        </div>
-    </main>
-
-    <footer>
-        <p>Datos proporcionados por el <a href="https://github.com/ao-data/albion-data-website/blob/master/api-info/api-info.md" target="_blank" rel="noopener noreferrer">Albion Data Project</a>.</p>
-    </footer>
-
-    <script src="script.js"></script>
-</body>
-</html>
