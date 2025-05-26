@@ -86,7 +86,18 @@ table {
     border-collapse: collapse;
     margin-top: 20px;
 }
+/* ... (existing CSS) ... */
 
+input[type="text"] {
+    width: 250px; /* Match the width of the select boxes */
+    padding: 8px;
+    margin-bottom: 10px; /* Space between search and select */
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1em;
+}
+
+/* ... (rest of your CSS) ... */
 th, td {
     border: 1px solid #ddd;
     padding: 8px;
