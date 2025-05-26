@@ -1,1 +1,172 @@
+/* General Body and Page Layout */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f0f2f5; /* Lighter grey for a modern look */
+    color: #1c1e21; /* Darker text for better readability */
+    margin: 0;
+    padding: 20px;
+    line-height: 1.6;
+}
 
+/* Header Styling */
+header {
+    background-color: #ffffff;
+    color: #1c1e21;
+    padding: 20px 0;
+    text-align: center;
+    margin-bottom: 30px;
+    border-bottom: 1px solid #dddfe2;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 2em;
+}
+
+/* Main Content Wrapper */
+main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* --- Controls Section --- */
+/* This is the main container for the dropdowns and button */
+.controls {
+    display: flex;
+    flex-wrap: wrap; /* Allows items to wrap on smaller screens */
+    gap: 30px; /* Space between the control groups */
+    justify-content: center; /* Center the control groups */
+    align-items: flex-end; /* Align items to the bottom for a clean line */
+    margin-bottom: 30px;
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Group for each set of labels and selects */
+.select-group {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Common style for labels */
+label {
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #606770;
+}
+
+/* Style for the text input and select boxes */
+input[type="text"],
+select {
+    width: 280px; /* A bit wider for better readability */
+    padding: 10px;
+    border: 1px solid #ccd0d5;
+    border-radius: 6px;
+    font-size: 1em;
+    background-color: #f5f6f7;
+}
+
+select {
+    height: 250px; /* Explicit height for multiple-select */
+}
+
+input[type="text"] {
+    margin-bottom: 15px; /* Space between search and select box */
+}
+
+/* Small hint text below the select boxes */
+.hint {
+    font-size: 0.85em;
+    color: #606770;
+    margin-top: 5px;
+}
+
+/* --- Button Styling --- */
+button {
+    padding: 12px 24px;
+    background-color: #1877f2; /* A modern blue */
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1.1em;
+    font-weight: bold;
+    transition: background-color 0.2s ease-in-out;
+}
+
+button:hover {
+    background-color: #166fe5; /* Slightly darker on hover */
+}
+
+/* --- Data Table Container --- */
+#data-container {
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow-x: auto; /* Allow horizontal scrolling for large tables */
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #dddfe2;
+}
+
+thead th {
+    background-color: #f5f6f7;
+    font-weight: bold;
+    color: #1c1e21;
+}
+
+tbody tr:nth-of-type(even) {
+    background-color: #f5f6f7; /* Zebra-striping for rows */
+}
+
+tbody tr:hover {
+    background-color: #e9ebee; /* Highlight row on hover */
+}
+
+/* --- Footer --- */
+footer {
+    text-align: center;
+    margin-top: 40px;
+    color: #606770;
+    font-size: 0.9em;
+}
+
+footer a {
+    color: #1877f2;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* --- Responsive Design for Smaller Screens --- */
+@media (max-width: 768px) {
+    .controls {
+        flex-direction: column; /* Stack controls vertically */
+        align-items: center; /* Center them on the page */
+    }
+
+    .select-group, input[type="text"], select {
+        width: 100%; /* Make controls take full width */
+        max-width: 400px; /* But not too wide */
+    }
+
+    button {
+        width: 100%;
+        max-width: 400px;
+    }
+}
